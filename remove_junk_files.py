@@ -10,8 +10,8 @@ from tqdm import tqdm
 import signal
 from datetime import datetime
 import platform
+from collections import defaultdict
 
-# 対象の不要ファイル
 JUNK_FILES = [
     '.DS_Store', 'Thumbs.db', 'desktop.ini',
     '.AppleDouble', '.LSOverride', '.Trash-*',
@@ -22,13 +22,10 @@ JUNK_PATTERNS = [
     '._*', '*.swp', '*.swo', '*.tmp', '*.bak', '*~', '.nfs*'
 ]
 
-# 中断フラグ
 interrupted = False
+MAX_ENTRIES_PER_CSV = 1000
+DEFAULT_MAX_CSV_SIZE = 1024 * 1024
 
-MAX_ENTRIES_PER_CSV = 1000  # CSV分割の件数しきい値（将来の拡張用）
-DEFAULT_MAX_CSV_SIZE = 1024 * 1024  # 1MB
-
-# macOS: 拡張属性削除
 def remove_xattr_mac(file_path, attr_name):
     try:
         result = subprocess.run(['xattr', '-p', attr_name, file_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -39,7 +36,6 @@ def remove_xattr_mac(file_path, attr_name):
         pass
     return False
 
-# Linux: 拡張属性削除
 def remove_attr_linux(file_path, attr_name):
     try:
         result = subprocess.run(['getfattr', '--only-values', '-n', attr_name, file_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -50,11 +46,9 @@ def remove_attr_linux(file_path, attr_name):
         pass
     return False
 
-# OS判定
 IS_MAC = platform.system() == "Darwin"
 IS_LINUX = platform.system() == "Linux"
 
-# Ctrl+C対応
 def handle_interrupt(signum, frame):
     global interrupted
     interrupted = True
@@ -62,7 +56,6 @@ def handle_interrupt(signum, frame):
 
 signal.signal(signal.SIGINT, handle_interrupt)
 
-# 拡張属性削除（OS別）
 def remove_attr(file_path, attr_name, dry_run):
     if not os.path.isfile(file_path):
         return False
@@ -74,7 +67,6 @@ def remove_attr(file_path, attr_name, dry_run):
         return remove_attr_linux(file_path, attr_name)
     return False
 
-# ファイル削除
 def remove_file(file_path, dry_run):
     if not os.path.isfile(file_path):
         return False
@@ -85,7 +77,6 @@ def remove_file(file_path, dry_run):
     except Exception:
         return False
 
-# 単一ファイル処理
 def process_file(file_path, args):
     deleted = {'file': False, 'attrs': [], 'junk': False}
     basename = os.path.basename(file_path)
@@ -103,10 +94,6 @@ def process_file(file_path, args):
             deleted['attrs'].append(attr)
 
     return (file_path, deleted)
-
-# 再帰的にファイル収集
-# ...（以下変更なし）
-
 
 def collect_files(path, exclude_git, recursive):
     files = []
@@ -129,12 +116,46 @@ def main():
     parser.add_argument('--dry-run', '-n', action='store_true', help='Dry run mode')
     parser.add_argument('--attr', '-a', action='append', default=[], help='Extended attributes to delete')
     parser.add_argument('--exclude-git', '-g', action='store_true', help='Exclude .git directories')
+    parser.add_argument('--logfile', '-l')
+    parser.add_argument('--csv-dir', '-d')
+    parser.add_argument('--max-csv-size', type=int, default=DEFAULT_MAX_CSV_SIZE)
+    parser.add_argument('--grouped-log', action='store_true')
+    parser.add_argument('--summary', '-s', action='store_true')
+    parser.add_argument('--recursive', '-R', action='store_true')
+    parser.add_argument('--no-color', '-C', action='store_true')
+    parser.add_argument('--csv-only', '-c', action='store_true')
+    parser.add_argument('--max-workers', '-j', type=int)
     args = parser.parse_args()
 
-    target_files = collect_files(args.path, args.exclude_git, recursive=True)
-    with ThreadPoolExecutor() as executor:
-        for file_path, deleted in tqdm(executor.map(lambda f: process_file(f, args), target_files), total=len(target_files)):
-            pass
+    target_files = collect_files(args.path, args.exclude_git, args.recursive)
+    results = []
+    summary = []
+    max_workers = args.max_workers if args.max_workers else os.cpu_count()
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        try:
+            for file_path, deleted in tqdm(executor.map(lambda f: process_file(f, args), target_files),
+                                           total=len(target_files), desc="Processing", unit="file", disable=args.csv_only):
+                if interrupted:
+                    break
+                results.append((file_path, deleted))
+                if args.summary and (deleted['file'] or deleted['junk'] or deleted['attrs']):
+                    summary.append(file_path)
+        except KeyboardInterrupt:
+            print("\n[INFO] Interrupted by user. Outputting partial results...\n")
+
+    file_count = sum(1 for _, d in results if d['file'])
+    attr_count = sum(len(d['attrs']) for _, d in results)
+    junk_count = sum(1 for _, d in results if d['junk'])
+
+    if not args.csv_only:
+        print(f"[INFO] Files deleted: {file_count}")
+        print(f"[INFO] Attributes removed: {attr_count}")
+        print(f"[INFO] Junk files deleted: {junk_count}")
+        if args.summary and summary:
+            print("\n[SUMMARY] Deleted items:")
+            for path in summary:
+                print(path)
 
 if __name__ == "__main__":
     main()

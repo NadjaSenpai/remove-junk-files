@@ -1,7 +1,7 @@
 # Remove Junk Files
 
-A fast, cross-platform command-line tool to clean up unwanted system files, metadata, and alternate data streams. Logs deletions to CSV files.
-ChatGPT made 99%.
+A fast, cross-platform command-line tool to clean up unwanted system files, metadata, and alternate data streams. Logs deletions to CSV files.  
+100% made by ChatGPT.
 
 ## Features
 
