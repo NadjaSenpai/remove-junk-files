@@ -52,7 +52,7 @@ IS_LINUX = platform.system() == "Linux"
 def handle_interrupt(signum, frame):
     global interrupted
     interrupted = True
-    print("\n[INFO] 中断されました。これまでの処理結果を出力します。\n")
+    print("\n[INFO] Interrupted. Output the results of the process so far.\n")
 
 signal.signal(signal.SIGINT, handle_interrupt)
 

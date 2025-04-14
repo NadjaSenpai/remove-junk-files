@@ -15,7 +15,7 @@ A fast, cross-platform command-line tool to clean up unwanted system files, meta
 ## Installation
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/remove-junk-files.git
+git clone https://github.com/NadjaSenpai/remove-junk-files.git
 cd remove-junk-files
 chmod +x remove_junk_files.py
 ```
