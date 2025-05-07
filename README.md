@@ -5,7 +5,6 @@
 ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20WSL-lightgrey)
 
 A fast, cross-platform command-line tool to clean up unwanted system files, metadata, and alternate data streams. Logs deletions to CSV files.  
-100% made by ChatGPT.
 
 ## Features
 
